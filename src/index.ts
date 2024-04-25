@@ -2,6 +2,7 @@ import * as core from '@actions/core';
 import { context, getOctokit } from '@actions/github';
 import {
   getComparisonMarkdownTable,
+  getDynamicBundleSizes,
   getSingleColumnMarkdownTable,
   getStaticBundleSizes,
 } from './bundle-size';
@@ -15,6 +16,7 @@ import { uploadJsonAsArtifact } from './upload-artifacts';
 
 const ARTIFACT_NAME_PREFIX = 'next-bundle-analyzer__';
 const FILE_NAME = 'bundle-sizes.json';
+const DYNAMIC_FILE_NAME = 'dynamic-bundle-sizes.json';
 
 async function run() {
   try {
@@ -38,13 +40,25 @@ async function run() {
       FILE_NAME,
     )) || { sha: 'none', data: [] };
     console.log(referenceBundleSizes);
+    const referenceDynamicBundleSizes = (await downloadArtifactAsJson(
+      octokit,
+      default_branch,
+      artifactName,
+      DYNAMIC_FILE_NAME,
+    )) || { sha: 'none', data: [] };
+    console.log(referenceDynamicBundleSizes);
 
     console.log('> Calculating local bundle sizes');
     const bundleSizes = getStaticBundleSizes(inputs.workingDirectory);
     console.log(bundleSizes);
+    const dynamicBundleSizes = getDynamicBundleSizes(inputs.workingDirectory);
+    console.log(dynamicBundleSizes);
 
     console.log('> Uploading local bundle sizes');
-    await uploadJsonAsArtifact(artifactName, FILE_NAME, bundleSizes);
+    await uploadJsonAsArtifact(artifactName, [
+      { fileName: FILE_NAME, data: bundleSizes },
+      { fileName: DYNAMIC_FILE_NAME, data: dynamicBundleSizes },
+    ]);
 
     if (issueNumber) {
       const title = `### Bundle sizes [${appName}]`;
@@ -54,22 +68,33 @@ async function run() {
         actualBundleSizes: bundleSizes,
         name: 'Route',
       });
+      const dynamicTable = getComparisonMarkdownTable({
+        referenceBundleSizes: referenceDynamicBundleSizes.data,
+        actualBundleSizes: dynamicBundleSizes,
+        name: 'Dynamic import',
+      });
       createOrReplaceComment({
         octokit,
         issueNumber,
         title,
         shaInfo,
         routesTable,
+        dynamicTable,
         strategy: inputs.commentStrategy,
       });
     } else if (context.ref === `refs/heads/${default_branch}` && inputs.createIssue) {
       console.log('> Creating/updating bundle size issue');
       const title = `Bundle sizes [${appName}]`;
       const routesTable = getSingleColumnMarkdownTable({ bundleSizes, name: 'Route' });
+      const dynamicTable = getSingleColumnMarkdownTable({
+        bundleSizes: dynamicBundleSizes,
+        name: 'Dynamic import',
+      });
       createOrReplaceIssue({
         octokit,
         title,
         routesTable,
+        dynamicTable,
       });
     }
   } catch (e) {

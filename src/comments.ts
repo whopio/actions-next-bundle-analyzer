@@ -28,6 +28,7 @@ export async function createOrReplaceComment({
   title,
   shaInfo,
   routesTable,
+  dynamicTable,
   strategy,
 }: {
   octokit: Octokit;
@@ -35,6 +36,7 @@ export async function createOrReplaceComment({
   title: string;
   shaInfo: string;
   routesTable: string | null;
+  dynamicTable: string | null;
   strategy: ActionInputs['commentStrategy'];
 }): Promise<void> {
   const existingComment = await findCommentByTextMatch({
@@ -43,7 +45,13 @@ export async function createOrReplaceComment({
     text: title,
   });
 
-  const body = formatTextFragments(title, shaInfo, routesTable ?? FALLBACK_COMPARISON_TEXT);
+  const body = formatTextFragments(
+    title,
+    shaInfo,
+    routesTable,
+    dynamicTable,
+    !routesTable?.trim() && !dynamicTable?.trim() ? FALLBACK_COMPARISON_TEXT : null,
+  );
 
   if (existingComment) {
     console.log(`Updating comment ${existingComment.id}`);
@@ -53,7 +61,12 @@ export async function createOrReplaceComment({
       body,
     });
     console.log(`Done with status ${response.status}`);
-  } else if (!existingComment && !routesTable && strategy === 'skip-insignificant') {
+  } else if (
+    !existingComment &&
+    !routesTable &&
+    !dynamicTable &&
+    strategy === 'skip-insignificant'
+  ) {
     console.log(`Skipping comment [${title}]: no significant changes`);
   } else {
     console.log(`Creating comment on PR ${issueNumber}`);

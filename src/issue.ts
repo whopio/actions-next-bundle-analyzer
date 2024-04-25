@@ -1,6 +1,7 @@
 import { context } from '@actions/github';
 
 import type { Octokit } from './types';
+import { formatTextFragments } from './text-format';
 
 async function findIssueByTitleMatch({ octokit, title }: { octokit: Octokit; title: string }) {
   const { data: issues } = await octokit.rest.issues.listForRepo(context.repo);
@@ -11,18 +12,21 @@ export async function createOrReplaceIssue({
   octokit,
   title,
   routesTable,
+  dynamicTable,
 }: {
   octokit: Octokit;
   title: string;
   routesTable: string;
+  dynamicTable: string;
 }): Promise<void> {
   const existingIssue = await findIssueByTitleMatch({ octokit, title });
+  const body = formatTextFragments(routesTable, dynamicTable);
 
   if (existingIssue) {
     console.log(`Updating issue ${existingIssue.number} with latest bundle sizes`);
     const response = await octokit.rest.issues.update({
       ...context.repo,
-      body: routesTable,
+      body,
       issue_number: existingIssue.number,
     });
     console.log(`Issue update response status ${response.status}`);
@@ -30,7 +34,7 @@ export async function createOrReplaceIssue({
     console.log(`Creating issue "${title}" to show latest bundle sizes`);
     const response = await octokit.rest.issues.create({
       ...context.repo,
-      body: routesTable,
+      body,
       title,
     });
     console.log(`Issue creation response status ${response.status}`);
