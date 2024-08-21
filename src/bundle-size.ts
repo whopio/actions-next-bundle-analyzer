@@ -6,16 +6,35 @@ type BuildManifest = {
   pages: Record<string, string[]>;
 };
 
+type Next13BuildManifest = {
+  pages: Record<string, string[]>;
+  rootMainFiles?: string[];
+};
+type AppPathRoutesManifest = Record<string, string>;
+
 type ReactLoadableManifest = Record<string, Next10Chunks | Next12Chunks>;
 type Next10Chunks = { id: string; file: string }[];
 type Next12Chunks = { id: string; files: string[] };
 
 export type PageBundleSizes = { page: string; size: number }[];
 
-export function getStaticBundleSizes(workingDir: string): PageBundleSizes {
+export function getStaticPagesBundleSizes(workingDir: string): PageBundleSizes {
   const manifest = loadBuildManifest(workingDir);
 
   return getPageSizesFromManifest(manifest, workingDir);
+}
+
+export function getStaticAppBundleSizes(workingDir: string): PageBundleSizes {
+  const buildManifest = loadBuildManifest(workingDir);
+  const appBuildManifest = loadAppBuildManifest(workingDir);
+  const appPathRoutesManifest = loadAppRoutesPathManifest(workingDir);
+
+  return getAppPagesSizesFromManifest(
+    buildManifest,
+    appBuildManifest,
+    appPathRoutesManifest,
+    workingDir,
+  );
 }
 
 export function getDynamicBundleSizes(workingDir: string): PageBundleSizes {
@@ -27,25 +46,102 @@ export function getDynamicBundleSizes(workingDir: string): PageBundleSizes {
 
 function getPageSizesFromManifest(manifest: BuildManifest, workingDir: string): PageBundleSizes {
   return Object.entries(manifest.pages).map(([page, files]) => {
-    const size = files
-      .map((filename: string) => {
-        const fn = path.join(process.cwd(), workingDir, '.next', filename);
-        const bytes = fs.readFileSync(fn);
-        const gzipped = zlib.gzipSync(bytes);
-        return gzipped.byteLength;
-      })
-      .reduce((s: number, b: number) => s + b, 0);
+    const size = getScriptSizes(files, workingDir);
 
     return { page, size };
   });
 }
 
-function loadBuildManifest(workingDir: string): BuildManifest {
+const scriptSizesCache = new Map<string, number>();
+
+function getScriptSize(filename: string, workingDir: string) {
+  const cacheEntry = scriptSizesCache.get(filename);
+  if (typeof cacheEntry !== 'undefined') return cacheEntry;
+  const fn = path.join(process.cwd(), workingDir, '.next', filename);
+  const bytes = fs.readFileSync(fn);
+  const gzipped = zlib.gzipSync(bytes);
+  scriptSizesCache.set(filename, gzipped.byteLength);
+  return gzipped.byteLength;
+}
+
+function getScriptSizes(files: string[], workingDir: string) {
+  return files.reduce((acc, file) => {
+    return acc + getScriptSize(file, workingDir);
+  }, 0);
+}
+
+function getAppPagesSizesFromManifest(
+  buildManifest: Next13BuildManifest,
+  appBuildManifest: BuildManifest,
+  appPathRoutesManifest: AppPathRoutesManifest,
+  workingDir: string,
+): PageBundleSizes {
+  const globalAppDirBundle = buildManifest.rootMainFiles;
+  if (!globalAppDirBundle) return [];
+  const globalAppDirBundleSizes = getScriptSizes(globalAppDirBundle, workingDir);
+
+  // Use entries from `appPathRoutesManifest` so that we can get mapping between file system paths
+  // and Next.js routes
+  const pageBundleSizes: PageBundleSizes = [];
+  for (const [fileSystemPath, route] of Object.entries(appPathRoutesManifest)) {
+    // We are only interested in routes point to layout or page fles
+    if (!fileSystemPath.endsWith('/page') && !fileSystemPath.endsWith('/layout')) {
+      continue;
+    }
+
+    const scriptSizes = getScriptSizes(
+      appBuildManifest.pages[fileSystemPath].filter(
+        // Filter out non-JS files as to match with the metrics reported by next build
+        (filePaths) => !globalAppDirBundle.includes(filePaths) && filePaths.endsWith('.js'),
+      ),
+      workingDir,
+    );
+    pageBundleSizes.push({
+      page: route,
+      size: scriptSizes,
+    });
+  }
+
+  pageBundleSizes.push({
+    page: 'First Load JS shared by all',
+    size: globalAppDirBundleSizes,
+  });
+
+  return pageBundleSizes;
+}
+
+function loadBuildManifest(workingDir: string): Next13BuildManifest {
   const file = fs.readFileSync(
     path.join(process.cwd(), workingDir, '.next', 'build-manifest.json'),
     'utf-8',
   );
   return JSON.parse(file);
+}
+
+function loadAppBuildManifest(workingDir: string): BuildManifest {
+  try {
+    // try-catch because older versions of next.js are missing this output
+    const file = fs.readFileSync(
+      path.join(process.cwd(), workingDir, '.next', 'app-build-manifest.json'),
+      'utf-8',
+    );
+    return JSON.parse(file);
+  } catch {
+    return { pages: {} };
+  }
+}
+
+function loadAppRoutesPathManifest(workingDir: string): AppPathRoutesManifest {
+  try {
+    // try-catch because older versions of next.js are missing this output
+    const file = fs.readFileSync(
+      path.join(process.cwd(), workingDir, '.next', 'app-path-routes-manifest.json'),
+      'utf-8',
+    );
+    return JSON.parse(file);
+  } catch {
+    return {};
+  }
 }
 
 function loadReactLoadableManifest(appChunks: string[], workingDir: string): BuildManifest {

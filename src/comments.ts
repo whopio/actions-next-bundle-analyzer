@@ -27,7 +27,8 @@ export async function createOrReplaceComment({
   issueNumber,
   title,
   shaInfo,
-  routesTable,
+  appRoutesTable,
+  pagesRoutesTable,
   dynamicTable,
   strategy,
 }: {
@@ -35,7 +36,8 @@ export async function createOrReplaceComment({
   issueNumber: number;
   title: string;
   shaInfo: string;
-  routesTable: string | null;
+  appRoutesTable: string | null;
+  pagesRoutesTable: string | null;
   dynamicTable: string | null;
   strategy: ActionInputs['commentStrategy'];
 }): Promise<void> {
@@ -48,9 +50,12 @@ export async function createOrReplaceComment({
   const body = formatTextFragments(
     title,
     shaInfo,
-    routesTable,
+    appRoutesTable,
+    pagesRoutesTable,
     dynamicTable,
-    !routesTable?.trim() && !dynamicTable?.trim() ? FALLBACK_COMPARISON_TEXT : null,
+    !pagesRoutesTable?.trim() && !dynamicTable?.trim() && !appRoutesTable?.trim()
+      ? FALLBACK_COMPARISON_TEXT
+      : null,
   );
 
   if (existingComment) {
@@ -63,7 +68,8 @@ export async function createOrReplaceComment({
     console.log(`Done with status ${response.status}`);
   } else if (
     !existingComment &&
-    !routesTable &&
+    !pagesRoutesTable &&
+    !appRoutesTable &&
     !dynamicTable &&
     strategy === 'skip-insignificant'
   ) {

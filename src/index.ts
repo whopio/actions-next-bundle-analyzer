@@ -4,7 +4,8 @@ import {
   getComparisonMarkdownTable,
   getDynamicBundleSizes,
   getSingleColumnMarkdownTable,
-  getStaticBundleSizes,
+  getStaticAppBundleSizes,
+  getStaticPagesBundleSizes,
 } from './bundle-size';
 
 import { createOrReplaceComment } from './comments';
@@ -15,7 +16,8 @@ import { createOrReplaceIssue } from './issue';
 import { uploadJsonAsArtifact } from './upload-artifacts';
 
 const ARTIFACT_NAME_PREFIX = 'next-bundle-analyzer__';
-const FILE_NAME = 'bundle-sizes.json';
+const APP_FILE_NAME = 'app-bundle-sizes.json';
+const PAGES_FILE_NAME = 'bundle-sizes.json';
 const DYNAMIC_FILE_NAME = 'dynamic-bundle-sizes.json';
 
 async function run() {
@@ -33,13 +35,20 @@ async function run() {
     const issueNumber = context.payload.pull_request?.number;
 
     console.log(`> Downloading bundle sizes from ${default_branch}`);
-    const referenceBundleSizes = (await downloadArtifactAsJson(
+    const referenceAppBundleSizes = (await downloadArtifactAsJson(
       octokit,
       default_branch,
       artifactName,
-      FILE_NAME,
+      APP_FILE_NAME,
     )) || { sha: 'none', data: [] };
-    console.log(referenceBundleSizes);
+    console.log(referenceAppBundleSizes);
+    const referencePagesBundleSizes = (await downloadArtifactAsJson(
+      octokit,
+      default_branch,
+      artifactName,
+      PAGES_FILE_NAME,
+    )) || { sha: 'none', data: [] };
+    console.log(referencePagesBundleSizes);
     const referenceDynamicBundleSizes = (await downloadArtifactAsJson(
       octokit,
       default_branch,
@@ -49,24 +58,35 @@ async function run() {
     console.log(referenceDynamicBundleSizes);
 
     console.log('> Calculating local bundle sizes');
-    const bundleSizes = getStaticBundleSizes(inputs.workingDirectory);
-    console.log(bundleSizes);
+    const appBundleSizes = getStaticAppBundleSizes(inputs.workingDirectory);
+    console.log('>> Route (App)');
+    console.log(appBundleSizes);
+    const pagesBundleSizes = getStaticPagesBundleSizes(inputs.workingDirectory);
+    console.log('>> Route (Pages)');
+    console.log(pagesBundleSizes);
     const dynamicBundleSizes = getDynamicBundleSizes(inputs.workingDirectory);
+    console.log('>> Dynamic import');
     console.log(dynamicBundleSizes);
 
     console.log('> Uploading local bundle sizes');
     await uploadJsonAsArtifact(artifactName, [
-      { fileName: FILE_NAME, data: bundleSizes },
+      { fileName: APP_FILE_NAME, data: appBundleSizes },
+      { fileName: PAGES_FILE_NAME, data: pagesBundleSizes },
       { fileName: DYNAMIC_FILE_NAME, data: dynamicBundleSizes },
     ]);
 
     if (issueNumber) {
       const title = `### Bundle sizes [${appName}]`;
-      const shaInfo = `Compared against ${referenceBundleSizes.sha}`;
-      const routesTable = getComparisonMarkdownTable({
-        referenceBundleSizes: referenceBundleSizes.data,
-        actualBundleSizes: bundleSizes,
-        name: 'Route',
+      const shaInfo = `Compared against ${referencePagesBundleSizes.sha}`;
+      const appRoutesTable = getComparisonMarkdownTable({
+        referenceBundleSizes: referenceAppBundleSizes.data,
+        actualBundleSizes: appBundleSizes,
+        name: 'Route (App)',
+      });
+      const pagesRoutesTable = getComparisonMarkdownTable({
+        referenceBundleSizes: referencePagesBundleSizes.data,
+        actualBundleSizes: pagesBundleSizes,
+        name: 'Route (Pages)',
       });
       const dynamicTable = getComparisonMarkdownTable({
         referenceBundleSizes: referenceDynamicBundleSizes.data,
@@ -78,14 +98,22 @@ async function run() {
         issueNumber,
         title,
         shaInfo,
-        routesTable,
+        appRoutesTable,
+        pagesRoutesTable,
         dynamicTable,
         strategy: inputs.commentStrategy,
       });
     } else if (context.ref === `refs/heads/${default_branch}` && inputs.createIssue) {
       console.log('> Creating/updating bundle size issue');
       const title = `Bundle sizes [${appName}]`;
-      const routesTable = getSingleColumnMarkdownTable({ bundleSizes, name: 'Route' });
+      const appRoutesTable = getSingleColumnMarkdownTable({
+        bundleSizes: appBundleSizes,
+        name: 'Route (App)',
+      });
+      const pagesRoutesTable = getSingleColumnMarkdownTable({
+        bundleSizes: pagesBundleSizes,
+        name: 'Route (Pages)',
+      });
       const dynamicTable = getSingleColumnMarkdownTable({
         bundleSizes: dynamicBundleSizes,
         name: 'Dynamic import',
@@ -93,7 +121,8 @@ async function run() {
       createOrReplaceIssue({
         octokit,
         title,
-        routesTable,
+        appRoutesTable,
+        pagesRoutesTable,
         dynamicTable,
       });
     }

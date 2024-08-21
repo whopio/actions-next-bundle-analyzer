@@ -11,16 +11,18 @@ async function findIssueByTitleMatch({ octokit, title }: { octokit: Octokit; tit
 export async function createOrReplaceIssue({
   octokit,
   title,
-  routesTable,
+  appRoutesTable,
+  pagesRoutesTable,
   dynamicTable,
 }: {
   octokit: Octokit;
   title: string;
-  routesTable: string;
+  appRoutesTable: string;
+  pagesRoutesTable: string;
   dynamicTable: string;
 }): Promise<void> {
   const existingIssue = await findIssueByTitleMatch({ octokit, title });
-  const body = formatTextFragments(routesTable, dynamicTable);
+  const body = formatTextFragments(appRoutesTable, pagesRoutesTable, dynamicTable);
 
   if (existingIssue) {
     console.log(`Updating issue ${existingIssue.number} with latest bundle sizes`);
