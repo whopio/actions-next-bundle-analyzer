@@ -55,12 +55,12 @@ function getPageSizesFromManifest(manifest: BuildManifest, workingDir: string): 
 const scriptSizesCache = new Map<string, number>();
 
 function getScriptSize(filename: string, workingDir: string) {
-  const cacheEntry = scriptSizesCache.get(filename);
-  if (typeof cacheEntry !== 'undefined') return cacheEntry;
   const fn = path.join(process.cwd(), workingDir, '.next', filename);
+  const cacheEntry = scriptSizesCache.get(fn);
+  if (typeof cacheEntry !== 'undefined') return cacheEntry;
   const bytes = fs.readFileSync(fn);
   const gzipped = zlib.gzipSync(bytes);
-  scriptSizesCache.set(filename, gzipped.byteLength);
+  scriptSizesCache.set(fn, gzipped.byteLength);
   return gzipped.byteLength;
 }
 
@@ -101,6 +101,8 @@ function getAppPagesSizesFromManifest(
       size: scriptSizes,
     });
   }
+
+  pageBundleSizes.sort((a, b) => a.page.localeCompare(b.page));
 
   pageBundleSizes.push({
     page: 'First Load JS shared by all',
