@@ -50,9 +50,7 @@ export async function createOrReplaceComment({
   const body = formatTextFragments(
     title,
     '<details>',
-    '<summary>',
-    shaInfo,
-    '</summary>',
+    `<summary>${shaInfo}</summary>`,
     appRoutesTable,
     pagesRoutesTable,
     dynamicTable,
