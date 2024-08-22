@@ -98,7 +98,7 @@ function getAppPagesSizesFromManifest(
     );
     pageBundleSizes.push({
       page: route,
-      size: scriptSizes,
+      size: scriptSizes + globalAppDirBundleSizes,
     });
   }
 
