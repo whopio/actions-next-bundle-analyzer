@@ -60,7 +60,7 @@ function getScriptSize(filename: string, workingDir: string) {
   const cacheEntry = scriptSizesCache.get(fn);
   if (typeof cacheEntry !== 'undefined') return cacheEntry;
   const bytes = fs.readFileSync(fn);
-  const gzipped = zlib.gzipSync(bytes);
+  const gzipped = zlib.gzipSync(bytes, { level: 9 });
   scriptSizesCache.set(fn, gzipped.byteLength);
   return gzipped.byteLength;
 }
