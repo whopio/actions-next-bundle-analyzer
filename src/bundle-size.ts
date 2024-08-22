@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
+import prettyBytes from './pretty-bytes';
 
 type BuildManifest = {
   pages: Record<string, string[]>;
@@ -253,8 +254,8 @@ function getSignificant(rows: PageChangeInfo[]): PageChangeInfo[] {
 
 function formatTable(name: string, rows: PageChangeInfo[]): string {
   const rowStrs = rows.map(({ page, type, size, diff }) => {
-    const diffStr = type === 'changed' ? formatBytes(diff, true) : type;
-    return `| \`${page}\` | ${formatBytes(size)} | ${diffStr} |`;
+    const diffStr = type === 'changed' ? prettyBytes(diff, { signed: true }) : type;
+    return `| \`${page}\` | ${prettyBytes(size)} | ${diffStr} |`;
   });
 
   return `| ${name} | Size (gzipped) | Diff |
@@ -264,29 +265,10 @@ function formatTable(name: string, rows: PageChangeInfo[]): string {
 
 function formatTableNoDiff(name: string, rows: PageChangeInfo[]): string {
   const rowStrs = rows.map(({ page, size }) => {
-    return `| \`${page}\` | ${formatBytes(size)} |`;
+    return `| \`${page}\` | ${prettyBytes(size)} |`;
   });
 
   return `| ${name} | Size (gzipped) |
   | --- | --- |
   ${rowStrs.join('\n')}`;
-}
-
-function formatBytes(bytes: number, signed = false) {
-  const sign = signed ? getSign(bytes) : '';
-  if (bytes === 0) {
-    return `no change`;
-  }
-
-  const k = 1024;
-  const dm = 2;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-
-  const i = Math.floor(Math.log(Math.abs(bytes)) / Math.log(k));
-
-  return `${sign}${parseFloat(Math.abs(bytes / k ** i).toFixed(dm))} ${sizes[i]}`;
-}
-
-function getSign(bytes: number) {
-  return bytes < 0 ? '-' : '+';
 }
